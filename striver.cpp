@@ -3,6 +3,7 @@
 -------------*/
 #include <bits/stdc++.h>
 #include <condition_variable>
+#include <cstddef>
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -251,39 +252,128 @@ void consumer() {
 
 // using smart pointers-----------------------------------------
 
-condition_variable cv;
-mutex mtx;
-queue<unique_ptr<int>> buffer;
+// condition_variable cv;
+// mutex mtx;
+// queue<unique_ptr<int>> buffer;
 
-void producer() {
-  for (int i = 0; i < 5; i++) {
-    // this_thread::sleep_for(chrono::milliseconds(500));
-    unique_ptr<int> dataPtr = make_unique<int>(i);
-    {
-      lock_guard<mutex> lock(mtx);
-      buffer.push(std::move(dataPtr));
-      cout << "Produced " << i << " ownership given to queue" << endl;
+// void producer() {
+//   for (int i = 0; i < 5; i++) {
+//     // this_thread::sleep_for(chrono::milliseconds(500));
+//     unique_ptr<int> dataPtr = make_unique<int>(i);
+//     {
+//       lock_guard<mutex> lock(mtx);
+//       buffer.push(std::move(dataPtr));
+//       cout << "Produced " << i << " ownership given to queue" << endl;
+//     }
+//     cv.notify_all();
+//   }
+// }
+
+// void consumer() {
+//   while (true) {
+//     unique_lock<mutex> lock(mtx);
+//     cv.wait(lock, [] { return !buffer.empty(); });
+//     auto consumedData = std::move(buffer.front());
+//     buffer.pop();
+//     cout << "Consumed " << (*consumedData) << " ownership given to consumer"
+//          << endl;
+//     if (*consumedData == 4)
+//       break;
+//   }
+// }
+
+// int main() {
+//   thread t1(producer);
+//   thread t2(consumer);
+//   t1.join();
+//   t2.join();
+// }
+
+// abstraction=pure virtual function
+// inheritance
+// polymerphism=static/dynamic binding
+// encapsulation=access modifires
+
+// designing my one memcpy
+
+void *my_memcpy(void *dest, const void *src, size_t n) {
+  char *d = (char *)dest;
+  const char *s = (const char *)src;
+
+  // Save the starting address to return it later
+  void *original_dest = dest;
+
+  // Use > 0 to ensure we copy exactly N bytes
+  while (n > 0) {
+    *d = *s;
+    d++;
+    s++;
+    n--;
+  }
+
+  return original_dest;
+}
+
+void *optimized_memcpy(void *dest, const void *src, size_t n) {
+  // 1. Still need these for the final "leftover" bytes
+  uint8_t *d_byte = (uint8_t *)dest;
+  const uint8_t *s_byte = (const uint8_t *)src;
+
+  // 2. Cast to 8-byte (64-bit) pointers
+  uint64_t *d64 = (uint64_t *)dest;
+  const uint64_t *s64 = (const uint64_t *)src;
+
+  // 3. Copy in 8-byte chunks as long as we have at least 8 bytes left
+  while (n >= 8) {
+    *d64 = *s64; // Moves 8 bytes in ONE clock cycle
+    d64++;       // Jumps the pointer forward by 8 bytes
+    s64++;       // Jumps the pointer forward by 8 bytes
+    n -= 8;      // We've handled 8 bytes
+  }
+
+  // 4. Handle the "Trailing Bytes"
+  // If n was 11, we moved 8 bytes, and now 3 bytes are left.
+  // We must go back to byte-by-byte for these last 3.
+  d_byte = (uint8_t *)d64;
+  s_byte = (uint8_t *)s64;
+
+  while (n > 0) {
+    *d_byte = *s_byte;
+    d_byte++;
+    s_byte++;
+    n--;
+  }
+  return dest;
+}
+
+void *my_memmove(void *dest, const void *src, size_t n) {
+  if (!dest || !src)
+    return dest;
+
+  char *d = (char *)dest;
+  const char *s = (const char *)src;
+
+  // Case 1: Overlap where dest is ahead of src
+  // We must copy BACKWARDS
+  if (d > s && d < s + n) {
+    // Move pointers to the end of the buffers
+    d += n - 1;
+    s += n - 1;
+    while (n--) {
+      *d = *s;
+      d--;
+      s--;
     }
-    cv.notify_all();
   }
-}
-
-void consumer() {
-  while (true) {
-    unique_lock<mutex> lock(mtx);
-    cv.wait(lock, [] { return !buffer.empty(); });
-    auto consumedData = std::move(buffer.front());
-    buffer.pop();
-    cout << "Consumed " << (*consumedData) << " ownership given to consumer"
-         << endl;
-    if (*consumedData == 4)
-      break;
+  // Case 2: No overlap OR dest is behind src
+  // Safe to copy FORWARDS
+  else {
+    while (n--) {
+      *d = *s;
+      d++;
+      s++;
+    }
   }
-}
 
-int main() {
-  thread t1(producer);
-  thread t2(consumer);
-  t1.join();
-  t2.join();
+  return dest;
 }
