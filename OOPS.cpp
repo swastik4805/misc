@@ -207,6 +207,121 @@ multi-process programs.
 It allows only one thread at a time to access a shared resource or critical section, ensuring that concurrent access does 
 not lead to data corruption or race conditions.
 Mutexes are often used to coordinate access to shared data in multi-threaded applications.
+A Mutex is like a bathroom key. Only the person with the key can enter; everyone else must wait outside until the key is returned.
+
+Smart Locking---------
+What if your code throws an error or returns after you lock a mutex but before you unlock it? The mutex stays locked forever, and your program "deadlocks."
+RAII (Resource Acquisition Is Initialization). std::lock_guard automatically unlocks the mutex when it goes out of scope (just like your Timer struct does!).
+
+struct Timer{
+    chrono::time_point<std::chrono::high_resolution_clock> start, end;
+    chrono::duration<float> duration;
+
+    Timer(){
+        start=chrono::high_resolution_clock::now();
+    }
+    ~Timer(){
+        end=chrono::high_resolution_clock::now();
+        duration=end-start;
+        cout<<"Timer took "<<duration.count()<<endl;
+    }
+};
+
+
+Condition Variables (Efficient Waiting)------------
+When ever a thread uses a while loop that checks s_Finished(a condition) constantly. This is called "Busy Waiting" and it wastes CPU cycles.
+A Condition Variable allows a thread to go to sleep and be "woken up" by another thread only when something changes.
+
+
+
+
+
+busy wait vs condition variable----------------
+void doWork(){
+    int i=0;
+    cout<<"Thread id"<<this_thread::get_id()<<endl;
+    while(!s_Finished){  // this is busy waiting
+        cout<<i<<". Working...\n";
+        i++;
+        this_thread::sleep_for(1s);
+    }
+}
+
+
+void worker_thread() {
+    std::unique_lock<std::mutex> lk(cv_m);
+    while (!ready) {
+        cv.wait(lk); 
+    }
+    // Once we exit the loop, we know 'ready' is true
+    cout << "Worker thread is now running!" << endl;
+}
+The "Magic" of cv.wait()
+In your first version (Busy Waiting), the while loop was "hot." The CPU was executing the ! and s_Finished check billions of times per second.
+In the condition_variable version, when the code reaches cv.wait(lk), the thread is completely suspended by the Operating System (OS).
+Busy Waiting: The thread is in a RUNNING state. It is actively using the CPU and consuming power.
+Condition Variable: The thread is put into a WAITING/BLOCKED state. The OS removes the thread from the CPU entirely. It consumes zero CPU cycles while it sits there.
+
+Feature,--------------Busy Waiting (while(!s_Finished)),------------CV Waiting (cv.wait)----------
+CPU Usage,					100% of one core,								0%
+Responsiveness,					Instant,						Very fast (depends on OS scheduler)
+Battery Impact,				Extremely High (Bad),					Minimal (Excellent)
+Thread State,					Running,								Blocked/Waiting
+
+
+
+
+
+------------------Memory Management-------------------
+
+
+smart pointers----------------------->
+//smart pointers do better memory management by dellocating memory manually.
+// unique_ptr and shared_ptr are the two types.
+
+Unique pointer---------------------
+This is the most efficient smart pointer. It says: "I am the only one who owns this memory. You cannot copy me."
+Use case: A single manager for a resource (like a specific hardware driver).
+Performance: Zero overhead. It’s as fast as a raw pointer.
+// Memory is automatically deallocated when uniquePtr goes out of scope
+#include <memory>
+void uniqueExample() {
+    // Allocation
+    std::unique_ptr<int> uPtr = std::make_unique<int>(25);
+    
+    // std::unique_ptr<int> uPtr2 = uPtr; // ERROR! Cannot copy ownership.
+    
+    std::cout << *uPtr << std::endl;
+} // uPtr goes out of scope, memory is DELETED automatically here.
+
+
+
+
+
+
+
+
+shared pointer---------------------------
+This allows multiple pointers to point to the same memory. It keeps a Reference Count (a counter of how many people are using it).
+The Logic: When the count hits zero, the memory is deleted.
+Use case: A shared resource used by multiple threads or different parts of an app (like a shared configuration object).
+
+void sharedExample() {
+    std::shared_ptr<int> sPtr1 = std::make_shared<int>(100);
+    {
+        std::shared_ptr<int> sPtr2 = sPtr1; // Count becomes 2
+        std::cout << "Count: " << sPtr1.use_count() << std::endl;
+    } // sPtr2 destroyed, Count becomes 1
+    
+    std::cout << "Count: " << sPtr1.use_count() << std::endl;
+} // sPtr1 destroyed, Count becomes 0, memory DELETED.
+
+
+
+
+
+
+
 
 Difference Between Mutex and Semaphores:
 Mutex:----------------------
@@ -254,6 +369,10 @@ Parallelism: Threads can run in parallel and are well-suited for tasks that can 
 Resource Sharing: Threads within the same process can easily share data and resources.
 Synchronization: Threads can synchronize more easily through mechanisms like mutexes and semaphores.
 Context Switching: Context switching between threads is faster compared to processes due to shared memory space.
+
+
+
+
 
 
 
@@ -428,6 +547,9 @@ char *ptr = "Hello Unstoppable";
 cout << ptr; 		// Hello Unstopable
 cout <<*ptr; 		//H
 
+
+
+
 int arr[5]={10,20,30,40,50};
 int *ptr=&arrr[0];
 cout<<*ptr;  		//10
@@ -439,6 +561,96 @@ feature 	                  char* ptr                                         int
 cout << ptr      Prints the content (string) until \0.           Prints the hexadecimal address.
 cout << *ptr            Prints the first character only.        Prints the first integer only.
 Reason                 Specialized overload for C-strings.        Standard pointer behavior.
+
+
+1.....................................
+int arr[] = {10, 20, 30, 40};
+int *p = arr;
+std::cout << *(p++) << std::endl; // Prints 10, then p moves to 20
+std::cout << *(++p) << std::endl; // p moves to 30, then prints 30
+
+2.......................................
+int arr[5];
+std::cout << sizeof(arr) << std::endl; // Prints size of whole array (e.g., 20 bytes)
+void func(int a[]) {
+    std::cout << sizeof(a) << std::endl; // Prints size of a POINTER (e.g., 8 bytes)
+}
+Rule: Arrays "decay" into pointers when passed to functions
+
+3.......................................
+int main() {
+    int arr[] = {10, 20, 30, 40, 50};
+    int *ptr = arr;
+    
+    std::cout << *(ptr + 3) << " ";
+    
+    char *c_ptr = (char*)ptr;
+    std::cout << *(int*)(c_ptr + 4) << std::endl;
+    
+}
+Answer: 40 20
+Explanation: 
+1. ptr + 3 moves the pointer by 3 x {sizeof(int)}. 
+Since int is 4 bytes, it moves 12 bytes forward to the value 40.
+2. c_ptr is a char*. When you do c_ptr + 4, it moves exactly 4 bytes forward (because sizeof(char) is 1).
+3. Since the first int (10) took up 4 bytes, moving 4 bytes lands you exactly at the start of the second int (20).
+
+4.........................................
+int main() {
+    const char *suit[] = {"Hearts", "Diamonds", "Clubs", "Spades"};
+    const char **p = suit;
+
+    p++;               // Move to "Diamonds"
+    std::cout << *p << " "; 
+    std::cout << **p << std::endl; 
+}
+
+Answer: Diamonds D
+Explanation:
+suit is an array of pointers. p is a pointer to the first pointer.
+p++ moves p to point to the address of the second string ("Diamonds").
+*p dereferences p once, giving you the char* (the whole string "Diamonds").
+**p dereferences twice. It goes to the string and picks the first character: 'D'.
+
+5..........................................
+int main() {
+    char str[] = "Qualcomm";
+    char *p = str;
+
+    std::cout << sizeof(str) << " ";
+    std::cout << sizeof(p) << " ";
+    std::cout << strlen(p) << std::endl;
+}
+Answer: 9 8 8
+Explanation:sizeof(str): Includes the hidden null-terminator \0 at the end of "Qualcomm". 8 + 1 = 9 bytes.
+sizeof(p): p is a pointer. On a 64-bit system, all pointers are 8 bytes.
+strlen(p): This counts characters until the null-terminator. Qualcomm has 8 characters.
+
+6............................................
+int main() {
+    const char *ptr[] = {"Qualcomm", "Snapdragon", "Adreno"};
+    const char **p = ptr;
+
+    p += 2;
+    std::cout << *p + 2 << std::endl;
+    return 0;
+}
+When you say const char **p = ptr;, p is pointing to the first pointer in the array (ptr[0]).
+p is the address of ptr[0].
+*p is the value stored in ptr[0], which is the address of the string "Qualcomm".
+**p is the character at that address, which is 'Q'.
+p += 2 moves the pointer to point to "Adreno". 
+*p dereferences it to get the string "Adreno" (a char*). 
+*p + 2 performs pointer arithmetic on that string, moving the start point forward by 2 characters ('A', 'd'). 
+Thus, it prints starting from 'r'.
+
+
+Level,				Mental Command,						Result
+p,			"""Where am I in the list?""",		The address of the first string box (ptr[0]).
+*p,			"""Jump into that box!""",			"You are now at the start of the string ""Qualcomm""."
+*p + 4,		"""Walk 4 steps forward.""",		You are now standing in front of the 'c'.
+*(*p + 4),	"""Grab what's inside!""",			You have the character 'c'.
+
 
 
 
@@ -560,19 +772,6 @@ int main (){
 
 
 
-smart pointers----------------------->
-//smart pointers do better memory management by dellocating memory manually.
-// unique_ptr and shared_ptr are the two types.
-
-unique_ptr<int> uniquePtr = make_unique<int>(23);
-// Memory is automatically deallocated when uniquePtr goes out of scope
-
-shared_ptr<int> sharedPtr1 = make_shared<int>(23);
-shared_ptr<int> sharedPtr2 = sharedPtr1;  // Shared ownership
-// Memory is deallocated when both sharedPtr1 and sharedPtr2 are out of scope
-
-
-
 
 // Declaring a constructor virtual is not permitted. Destructors can be made virtual.
 Virtual destructors are useful when you might potentially delete an instance of a derived class through a pointer to base class
@@ -656,6 +855,25 @@ int main()
 
 //Dynamic binding-> in this concept, which methed to call is decided at the runtime. It is also
 called late binding. See a YT video for example. 
+
+
+
+
+
+----------------------------------------------------------------------------
+---------------------------LINUX FILE SYSTEM--------------------------------
+Everything is a file
+The Linux file structure follows the Filesystem Hierarchy Standard (FHS).
+
+
+
+
+
+
+
+
+
+
 
 
 

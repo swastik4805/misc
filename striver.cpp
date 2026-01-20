@@ -377,3 +377,25 @@ void *my_memmove(void *dest, const void *src, size_t n) {
 
   return dest;
 }
+
+
+
+
+//Implement your own sizeof operator------------
+template <typename T>
+size_t my_sizeof() {
+    T arr[2]; // Create an array of two elements
+    
+    // Get the address of the first and second elements
+    // We cast them to char* so the subtraction gives us the result in BYTES
+    size_t addr1 = (size_t)&arr[0];
+    size_t addr2 = (size_t)&arr[1];
+    
+    return addr2 - addr1;
+}
+
+int main() {
+    std::cout << "Size of int: " << my_sizeof<int>() << std::endl;
+    std::cout << "Size of double: " << my_sizeof<double>() << std::endl;
+    return 0;
+}
