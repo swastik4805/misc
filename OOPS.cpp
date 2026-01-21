@@ -571,9 +571,9 @@ std::cout << *(++p) << std::endl; // p moves to 30, then prints 30
 
 2.......................................
 int arr[5];
-std::cout << sizeof(arr) << std::endl; // Prints size of whole array (e.g., 20 bytes)
+cout << sizeof(arr) << endl; // Prints size of whole array (e.g., 20 bytes)
 void func(int a[]) {
-    std::cout << sizeof(a) << std::endl; // Prints size of a POINTER (e.g., 8 bytes)
+    cout << sizeof(a) << endl; // Prints size of a POINTER (e.g., 8 bytes)
 }
 Rule: Arrays "decay" into pointers when passed to functions
 
@@ -607,7 +607,8 @@ int main() {
 
 Answer: Diamonds D
 Explanation:
-suit is an array of pointers. p is a pointer to the first pointer.
+suit is an array of pointers. 
+p is a pointer to the first pointer.
 p++ moves p to point to the address of the second string ("Diamonds").
 *p dereferences p once, giving you the char* (the whole string "Diamonds").
 **p dereferences twice. It goes to the string and picks the first character: 'D'.
